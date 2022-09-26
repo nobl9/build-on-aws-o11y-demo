@@ -1,0 +1,13 @@
+{
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "check-word-lists": "node .github/ci/check-word-lists.js",
+    "check-trailing-whitespaces": "node .github/ci/check-trailing-whitespaces.js"
+  },
+  "devDependencies": {
+    "@cspell/dict-lorem-ipsum": "^2.0.0",
+    "cspell": "^6.2.2",
+    "markdownlint-cli": "^0.31.1"
+  }
+}

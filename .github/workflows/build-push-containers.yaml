@@ -1,0 +1,56 @@
+name: Create and publish a Docker image
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  OWNER: nobl9
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Docker Login
+        uses: docker/login-action@v2.0.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for load generation image
+        id: load-meta
+        uses: docker/metadata-action@v4.0.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/observability_demo_load
+
+      - name: Build and push load Docker images
+        uses: docker/build-push-action@v3.0.0
+        with:
+          push: true
+          context: "./src/load_generation"
+          tags: ${{ steps.load-meta.outputs.tags }}
+          labels: ${{ steps.load-meta.outputs.labels }}
+
+      - name: Extract metadata (tags, labels) for server image
+        id: server-meta
+        uses: docker/metadata-action@v4.0.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/observability_demo_server
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v3.0.0
+        with:
+          push: true
+          context: "./src/server"
+          tags: ${{ steps.server-meta.outputs.tags }}
+          labels: ${{ steps.server-meta.outputs.labels }}

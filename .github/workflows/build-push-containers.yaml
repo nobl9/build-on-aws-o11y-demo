@@ -31,7 +31,7 @@ jobs:
         id: load-meta
         uses: docker/metadata-action@v4.0.1
         with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/observability_demo_load
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/build_on_aws_demo_load
 
       - name: Build and push load Docker images
         uses: docker/build-push-action@v3.0.0
@@ -45,7 +45,7 @@ jobs:
         id: server-meta
         uses: docker/metadata-action@v4.0.1
         with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/observability_demo_server
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/build_on_aws_demo_server
 
       - name: Build and push Docker images
         uses: docker/build-push-action@v3.0.0

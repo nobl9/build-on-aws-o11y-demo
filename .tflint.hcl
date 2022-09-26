@@ -4,7 +4,7 @@ config {
 
 plugin "aws" {
   enabled = true
-  version = "0.13.4"
+  version = "0.17.0"
   source  = "github.com/terraform-linters/tflint-ruleset-aws"
 }
 
@@ -48,4 +48,3 @@ rule "terraform_unused_required_providers" {
 rule "terraform_standard_module_structure" {
   enabled = true
 }
-

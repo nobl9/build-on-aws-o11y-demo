@@ -47,6 +47,7 @@ func getDelay(min int, max int, lagTimes []int, duration int) time.Duration {
 	r := rand.Intn(max-min+1) + min
 	if isProblematic(lagTimes, duration) {
 		r = r * 2
+		log.Println("We are in delay")
 	}
 	return time.Duration(time.Duration(r) * time.Millisecond)
 }
@@ -72,6 +73,7 @@ func main() {
 
 		if isProblematic(errorTimes, errorDuration) {
 			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("good: we are in error")
 		} else {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write([]byte("Hello from example application."))
@@ -89,6 +91,7 @@ func main() {
 		time.Sleep(delay)
 		if isProblematic(errorTimes, errorDuration) {
 			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("ok: we are in error")
 		} else {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write([]byte("Hello from example application."))
@@ -105,6 +108,7 @@ func main() {
 		time.Sleep(delay)
 		if isProblematic(errorTimes, errorDuration) {
 			w.WriteHeader(http.StatusInternalServerError)
+			log.Print("veryslow: we are in error")
 		} else {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write([]byte("Hello from example application."))

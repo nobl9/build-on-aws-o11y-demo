@@ -67,7 +67,7 @@ func main() {
 		}
 	})
 
-	// After a reasonable delay returns a successful response ~90% of the time.
+	// After a reasonable delay returns a successful response most of the time.
 	// Otherwise, returns an error response (500)
 	acceptableHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(200, 1000)
@@ -75,9 +75,11 @@ func main() {
 
 		// roll the dice and see if we return an error
 		rand.Seed(time.Now().UnixNano())
-		rand.Intn(100)
+		dice := rand.Intn(100)
 
-		if rand.Intn(100) > 10 {
+		log.Print(dice)
+
+		if dice > 2 {
 			w.WriteHeader(http.StatusOK)
 			_, err := w.Write([]byte("Hello from example application."))
 			if err != nil {

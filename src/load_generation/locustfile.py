@@ -5,31 +5,31 @@ from locust import LoadTestShape
 class StandardUser(HttpUser):
     wait_time = between(0.5,2)
 
-    @task(5)
+    @task(10)
     def good(self):
         self.client.get("/good")
 
-    @task(2)
+    @task(8)
     def ok(self):
         self.client.get("/ok")
 
     @task(3)
-    def bad(self):
-        self.client.get("/bad")
-
-    @task(4)
-    def acceptable(self):
-        self.client.get("/acceptable")
-
-    @task(2)
     def veryslow(self):
         self.client.get("/veryslow")
 
-    @task(3)
+    @task(2)
+    def acceptable(self):
+        self.client.get("/acceptable")
+
+    @task(1)
+    def bad(self):
+        self.client.get("/bad")
+
+    @task(1)
     def unpredictable(self):
         self.client.get("/err")
 
-    @task(2)
+    @task(1)
     def not_found(self):
         self.client.get("/notfound")
 

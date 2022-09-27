@@ -48,7 +48,7 @@ func main() {
 
 	// Small delay but successful
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delay := getDelay(500, 800)
+		delay := getDelay(200, 800)
 		log.Printf("ok: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)
@@ -60,7 +60,7 @@ func main() {
 
 	// Significant delay, but successful
 	verySlowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delay := getDelay(800, 2000)
+		delay := getDelay(500, 2000)
 		log.Printf("veryslow: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)

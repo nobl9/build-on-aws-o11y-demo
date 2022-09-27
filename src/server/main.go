@@ -70,30 +70,6 @@ func main() {
 		}
 	})
 
-	// After a reasonable delay returns a successful response most of the time.
-	// Otherwise, returns an error response (500)
-	acceptableHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delay := getDelay(200, 1000)
-		log.Printf("acceptable: delay is %d", delay/time.Millisecond)
-		time.Sleep(delay)
-
-		// roll the dice and see if we return an error
-		rand.Seed(time.Now().UnixNano())
-		dice := rand.Intn(100)
-
-		if dice > 2 {
-			w.WriteHeader(http.StatusOK)
-			_, err := w.Write([]byte("Hello from example application."))
-			log.Printf("acceptable: ok")
-			if err != nil {
-				log.Printf("Write failed: %v", err)
-			}
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Printf("acceptable: error")
-		}
-	})
-
 	// No delay, and returns 404
 	notfoundHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -122,7 +98,6 @@ func main() {
 
 	mux.Handle("/good", goodHandler)
 	mux.Handle("/ok", okHandler)
-	mux.Handle("/acceptable", acceptableHandler)
 	mux.Handle("/veryslow", verySlowHandler)
 	mux.Handle("/err", errorHandler)
 	mux.Handle("/bad", badHandler)

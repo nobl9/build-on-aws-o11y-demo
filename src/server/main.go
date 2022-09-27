@@ -85,7 +85,7 @@ func main() {
 
 	// Significant delay, and returns 500
 	badHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		delay := getDelay(500, 2000)
+		delay := getDelay(500, 1200)
 		log.Printf("bad: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusInternalServerError)

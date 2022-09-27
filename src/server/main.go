@@ -37,7 +37,7 @@ func main() {
 	// Happy path. Fast and returns successfully
 	goodHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(100, 500)
-		log.Printf("good: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("good: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("Hello from example application."))
@@ -49,7 +49,7 @@ func main() {
 	// Small delay but successful
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(500, 800)
-		log.Printf("ok: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("ok: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("Hello from example application."))
@@ -61,7 +61,7 @@ func main() {
 	// Significant delay, but successful
 	verySlowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(800, 2000)
-		log.Printf("veryslow: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("veryslow: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("Hello from example application."))
@@ -74,7 +74,7 @@ func main() {
 	// Otherwise, returns an error response (500)
 	acceptableHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(200, 1000)
-		log.Printf("acceptable: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("acceptable: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 
 		// roll the dice and see if we return an error
@@ -102,7 +102,7 @@ func main() {
 	// Small delay, and returns 500
 	errorHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(200, 400)
-		log.Printf("error: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("error: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusInternalServerError)
 	})
@@ -110,7 +110,7 @@ func main() {
 	// Significant delay, and returns 500
 	badHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		delay := getDelay(500, 2000)
-		log.Printf("bad: delay is %d", time.Duration(delay)*time.Millisecond)
+		log.Printf("bad: delay is %d", delay/time.Millisecond)
 		time.Sleep(delay)
 		w.WriteHeader(http.StatusInternalServerError)
 	})

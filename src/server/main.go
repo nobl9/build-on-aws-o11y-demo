@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httptrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/net/http"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 var (
@@ -106,50 +107,18 @@ func main() {
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
-	mux := http.NewServeMux()
-	mux.Handle("/good",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "good"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, goodHandler),
-		),
-	)
-	mux.Handle("/ok",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "ok"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, okHandler),
-		),
-	)
-	mux.Handle("/acceptable",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "acceptable"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, acceptableHandler),
-		),
-	)
-	mux.Handle("/veryslow",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "veryslow"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, verySlowHandler),
-		),
-	)
-	mux.Handle("/err",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "err"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, errorHandler),
-		),
-	)
-	mux.Handle("/bad",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "bad"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, badHandler),
-		),
-	)
-	mux.Handle("/notfound",
-		promhttp.InstrumentHandlerDuration(
-			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "not-found"}),
-			promhttp.InstrumentHandlerCounter(httpRequestsTotal, notfoundHandler),
-		),
-	)
-	mux.Handle("/metrics", promhttp.HandlerFor(r, promhttp.HandlerOpts{}))
+	tracer.Start()
+	defer tracer.Stop()
+
+	mux := httptrace.NewServeMux()
+
+	mux.Handle("/good", goodHandler)
+	mux.Handle("/ok", okHandler)
+	mux.Handle("/acceptable", acceptableHandler)
+	mux.Handle("/veryslow", verySlowHandler)
+	mux.Handle("/err", errorHandler)
+	mux.Handle("/bad", badHandler)
+	mux.Handle("/notfound", notfoundHandler)
 
 	srv := &http.Server{Addr: ":8080", Handler: mux}
 

@@ -1,5 +1,21 @@
+provider "aws" {
+  region = var.region
+}
+
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    # This requires the awscli to be installed locally where Terraform is executed
+    args = ["eks", "get-token", "--cluster-name", module.eks.cluster_id]
+  }
+}
+
 locals {
-  name = var.name == "" ? "build-on-aws-demo-${replace(basename(path.cwd), "_", "-")}" : var.name
+  name = var.name == "" ? replace(basename(path.cwd), "_", "-") : var.name
 
   tags = {
     Name  = local.name
@@ -9,13 +25,52 @@ locals {
   # the primary cidr block for this
   cidr_block  = "10.0.0.0/16"
   cidr_blocks = [for cidr_block in cidrsubnets(local.cidr_block, 4, 4, 4) : cidrsubnets(cidr_block, 4, 4, 4)]
-
-  prom_service_account_name = "amazon-managed-service-prometheus"
 }
 
 data "aws_caller_identity" "current" {}
 
+/*===========================================
+ *
+ * TERRAFORM BACKEND
+ *
+ */
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "build-on-aws-o11y-demo-terraform-state"
+}
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.bucket
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.bucket
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_dynamodb_table" "terraform_locks" {
+  name         = "${local.name}-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+
+/*===========================================
+ *
+ * NETWORK
+ *
+ */
 resource "aws_security_group" "additional" {
   description = "additional security group"
   name_prefix = "${local.name}-additional"
@@ -44,9 +99,9 @@ module "vpc" {
   cidr = local.cidr_block
 
   azs             = ["${var.region}a", "${var.region}b", "${var.region}c"]
-  private_subnets = local.cidr_blocks.0
-  public_subnets  = local.cidr_blocks.1
-  intra_subnets   = local.cidr_blocks.2
+  private_subnets = local.cidr_blocks[0]
+  public_subnets  = local.cidr_blocks[1]
+  intra_subnets   = local.cidr_blocks[2]
 
   enable_nat_gateway   = true
   single_nat_gateway   = true
@@ -69,6 +124,11 @@ module "vpc" {
   tags = local.tags
 }
 
+/*===========================================
+ *
+ * CLUSTER
+ *
+ */
 module "eks" {
   source          = "terraform-aws-modules/eks/aws"
   version         = "18.26.3"
@@ -170,3 +230,199 @@ module "eks" {
   tags = local.tags
 }
 
+/*===========================================
+ *
+ * APP
+ *
+ */
+resource "kubernetes_namespace" "load" {
+  metadata {
+    name = "${var.k8s_namespace}-load-generation"
+  }
+}
+
+resource "kubernetes_deployment" "load" {
+  metadata {
+    name      = "${local.name}-load-generation"
+    namespace = "${var.k8s_namespace}-load-generation"
+    labels = {
+      app = "LoadGeneration"
+    }
+  }
+
+  spec {
+    replicas = 5
+
+    selector {
+      match_labels = {
+        app = "LoadGeneration"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "LoadGeneration"
+        }
+      }
+
+      spec {
+        container {
+          image             = "ghcr.io/nobl9/build_on_aws_demo_load:steps-one"
+          name              = "load"
+          image_pull_policy = "Always"
+
+          env {
+            name  = "HOST"
+            value = "http://${local.name}-server.${var.k8s_namespace}-server.svc.cluster.local:8080"
+          }
+
+          resources {
+            limits = {
+              cpu    = "0.5"
+              memory = "1Gi"
+            }
+            requests = {
+              cpu    = "250m"
+              memory = "1Gi"
+            }
+          }
+        }
+      }
+    }
+  }
+  depends_on = [kubernetes_namespace.load]
+}
+
+resource "kubernetes_namespace" "server" {
+  metadata {
+    name = "${var.k8s_namespace}-server"
+  }
+}
+
+resource "kubernetes_deployment" "server" {
+  metadata {
+    name      = "${local.name}-server"
+    namespace = "${var.k8s_namespace}-server"
+    labels = {
+      app                          = "Server"
+      "tags.datadoghq.com/env"     = "dev"
+      "tags.datadoghq.com/service" = "build-on-aws-demo-server"
+      "tags.datadoghq.com/version" = "1.0"
+    }
+  }
+
+  spec {
+    replicas = 3
+
+    selector {
+      match_labels = {
+        app = "Server"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app                          = "Server"
+          "tags.datadoghq.com/env"     = "dev"
+          "tags.datadoghq.com/service" = "build-on-aws-demo-server"
+          "tags.datadoghq.com/version" = "1.0"
+        }
+        annotations = {
+          "prometheus.io/scrape" = "true"
+          "prometheus.io/port"   = "8080"
+        }
+      }
+
+      spec {
+        volume {
+          host_path {
+            path = "/var/run/datadog/"
+          }
+          name = "apmsocketpath"
+        }
+
+        container {
+          image             = "ghcr.io/nobl9/build_on_aws_demo_server:steps-one"
+          name              = "server"
+          image_pull_policy = "Always"
+
+          volume_mount {
+            name       = "apmsocketpath"
+            mount_path = "/var/run/datadog"
+          }
+
+          env {
+            name  = "DD_HOSTNAME"
+            value = "datadog-build-on-aws-demo.svc.cluster.local"
+          }
+          env {
+            name = "DD_ENV"
+            value_from {
+              field_ref {
+                field_path = "metadata.labels['tags.datadoghq.com/env']"
+              }
+            }
+          }
+
+          env {
+            name = "DD_SERVICE"
+            value_from {
+              field_ref {
+                field_path = "metadata.labels['tags.datadoghq.com/service']"
+              }
+            }
+          }
+          env {
+            name = "DD_VERSION"
+            value_from {
+              field_ref {
+                field_path = "metadata.labels['tags.datadoghq.com/version']"
+              }
+            }
+          }
+
+          resources {
+            limits = {
+              cpu    = "0.5"
+              memory = "1Gi"
+            }
+            requests = {
+              cpu    = "250m"
+              memory = "1Gi"
+            }
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/good"
+              port = 8080
+            }
+
+            initial_delay_seconds = 3
+            period_seconds        = 3
+          }
+        }
+      }
+    }
+  }
+  depends_on = [kubernetes_namespace.server]
+}
+
+resource "kubernetes_service" "server" {
+  metadata {
+    name      = "${local.name}-server"
+    namespace = kubernetes_deployment.server.metadata[0].namespace
+  }
+  spec {
+    selector = {
+      app = kubernetes_deployment.server.metadata[0].labels.app
+    }
+    port {
+      port        = 8080
+      target_port = 8080
+    }
+  }
+  depends_on = [kubernetes_namespace.server]
+}

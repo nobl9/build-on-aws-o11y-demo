@@ -13,5 +13,5 @@ variable "name" {
 variable "k8s_namespace" {
   description = "The kubernetes namespace to use"
   type        = string
-  default     = "observability-demo"
+  default     = "build-on-aws-demo"
 }

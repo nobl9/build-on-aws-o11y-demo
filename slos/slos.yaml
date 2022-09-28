@@ -1,0 +1,27 @@
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  displayName: Mr Telemetry App Latency
+  name: mr-telemetry-app-latency
+  project: build-on-aws
+spec:
+  description: Latency SLO for Mr Telemetry
+  service: build-on-aws-service
+  indicator:
+    metadata:
+      name: mr-telemetry-latency-indicator
+      displayName: Mr Telemetry Latency Indicator
+    spec:
+      thresholdMetric:
+        metricSource:
+          type: Datadog
+          spec:
+            query: p90:trace.http.request{env:dev,service:build-on-aws-demo-server}
+  timeWindow:
+    - duration: 28d
+      isRolling: true
+  budgetingMethod: Occurrences
+  objectives:
+    - displayName: Good
+      target: 0.98

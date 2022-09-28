@@ -1,0 +1,8 @@
+---
+apiVersion: openslo/v1
+kind: Service
+metadata:
+  displayName: Build On AWS Service
+  name: build-on-aws-service
+spec:
+  description: "Project holding all of the SLOs for Build on AWS demo"

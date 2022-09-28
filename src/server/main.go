@@ -55,10 +55,10 @@ func getDelay(min int, max int, lagTimes []int, duration int) time.Duration {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	// make 3 times an hour to break
-	errorTimes := rand.Perm(60)[:3]
+	errorTimes := rand.Perm(60)[:2]
 	errorDuration := rand.Intn(10) + 1
 	// make 5 and hour to slow down
-	lagTimes := rand.Perm(60)[:5]
+	lagTimes := rand.Perm(60)[:2]
 	lagDuration := rand.Intn(10) + 1
 
 	r := prometheus.NewRegistry()

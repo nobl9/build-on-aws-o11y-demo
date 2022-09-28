@@ -354,8 +354,8 @@ resource "kubernetes_deployment" "server" {
           }
 
           env {
-            name  = "DD_HOSTNAME"
-            value = "datadog-build-on-aws-demo.datadoog.svc.cluster.local"
+            name  = "DD_AGENT_HOST"
+            value = "datadog-build-on-aws-demo.datadog.svc.cluster.local"
           }
           env {
             name = "DD_ENV"

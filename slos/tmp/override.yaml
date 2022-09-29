@@ -1,6 +1,6 @@
 spec:
   indicator:
     metricSource:
-      kind: Direct
-      name: build-on-aws-dd-agent
+      kind: Agent
+      name: build-on-aws-managed-prometheus-agent
       project: build-on-aws

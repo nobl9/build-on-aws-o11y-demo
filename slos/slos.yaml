@@ -15,9 +15,9 @@ spec:
     spec:
       thresholdMetric:
         metricSource:
-          type: Datadog
+          type: AmazonPrometheus
           spec:
-            query: p90:trace.http.request{env:dev,service:build-on-aws-demo-server}
+            promql: histogram_quantile(0.9, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))
   timeWindow:
     - duration: 28d
       isRolling: true

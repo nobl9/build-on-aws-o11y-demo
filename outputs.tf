@@ -12,3 +12,8 @@ output "cluster_id" {
   description = "The name/id of the EKS cluster. Will block on cluster creation until the cluster is really ready"
   value       = module.eks.cluster_id
 }
+
+output "workspace_endpoint" {
+  description = "AmazonPrometheus workspace endpoint"
+  value       = aws_prometheus_workspace.demo.prometheus_endpoint
+}

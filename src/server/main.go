@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	httptrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/net/http"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -53,6 +52,7 @@ func getDelay(min int, max int, lagTimes []int, duration int) time.Duration {
 }
 
 func main() {
+	// Set up chaos
 	rand.Seed(time.Now().UnixNano())
 	// make 3 times an hour to break
 	errorTimes := rand.Perm(60)[:2]
@@ -139,17 +139,45 @@ func main() {
 		w.WriteHeader(http.StatusInternalServerError)
 	})
 
-	tracer.Start()
-	defer tracer.Stop()
+	mux := http.NewServeMux()
 
-	mux := httptrace.NewServeMux()
-
-	mux.Handle("/good", goodHandler)
-	mux.Handle("/ok", okHandler)
-	mux.Handle("/veryslow", verySlowHandler)
-	mux.Handle("/err", errorHandler)
-	mux.Handle("/bad", badHandler)
-	mux.Handle("/notfound", notfoundHandler)
+	mux.Handle("/good",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "good"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, goodHandler),
+		),
+	)
+	mux.Handle("/ok",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "ok"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, okHandler),
+		),
+	)
+	mux.Handle("/veryslow",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "veryslow"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, verySlowHandler),
+		),
+	)
+	mux.Handle("/err",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "err"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, errorHandler),
+		),
+	)
+	mux.Handle("/bad",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "bad"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, badHandler),
+		),
+	)
+	mux.Handle("/notfound",
+		promhttp.InstrumentHandlerDuration(
+			httpRequestDuration.MustCurryWith(prometheus.Labels{"handler": "not-found"}),
+			promhttp.InstrumentHandlerCounter(httpRequestsTotal, notfoundHandler),
+		),
+	)
+	mux.Handle("/metrics", promhttp.HandlerFor(r, promhttp.HandlerOpts{}))
 
 	srv := &http.Server{Addr: ":8080", Handler: mux}
 

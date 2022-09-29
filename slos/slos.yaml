@@ -25,3 +25,5 @@ spec:
   objectives:
     - displayName: Good
       target: 0.98
+      value: 1.9
+      op: lt

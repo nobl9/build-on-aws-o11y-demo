@@ -1,6 +1,10 @@
 # Build on AWS Observability Demo
 
-This demo creates an Amazon Managed Service for Prometheus workspace, as
+This demo shows how to create SLOs using [OpenSLO](https://www.openslo.com) and
+apply them to [Nobl9](https://www.nobl9.com). It uses metrics from a provided
+sample app, Mr. Telemetry.
+
+It creates an Amazon Managed Service for Prometheus workspace, as
 well as an EKS cluster with a demo service that exposes
 Prometheus metrics, and a load generation script to generate traffic and
 metric data. Prometheus is deployed in the cluster, and writes the gathered
@@ -20,6 +24,8 @@ that is created.
 
 **NOTE** *This is a demo, and meant to be used in development and testing.
 Please to do not use this in a production deployment*
+
+### Creating the Resources
 
 To create the resources, from the root directory, you can run
 `terraform apply`. Refer to the
@@ -58,9 +64,24 @@ Log in with `admin` and the password from the previous step.
 Once you are done, you can call `terraform destroy` to clean up all created
 resources.
 
+### Converting the YAML
+
 To convert to nobl9, you can use the following commands:
 
 ```bash
 oslo convert -p build-on-aws -f slos/slos.yaml -o nobl9 > slos/tmp/converted-slo.yaml
+```
+
+If you need to add extra values to the yaml, such as with SLOs, you can use
+`yq` to merge the converted file with an override file containing your
+new values with :
+
+```bash
 yq ea 'select(fileIndex == 0) * select(fileIndex == 1)' slos/tmp/converted-slo.yaml slos/tmp/override.yaml > nobl9.yaml
+```
+
+Once you have that yaml file you can apply them in Nobl9 with
+
+```bash
+sloctl apply -f nobl9.yaml
 ```

@@ -14,6 +14,20 @@ provider "kubernetes" {
   }
 }
 
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      # This requires the awscli to be installed locally where Terraform is executed
+      args = ["eks", "get-token", "--cluster-name", module.eks.cluster_id]
+    }
+  }
+}
+
 locals {
   name = var.name == "" ? replace(basename(path.cwd), "_", "-") : var.name
 
@@ -25,6 +39,8 @@ locals {
   # the primary cidr block for this
   cidr_block  = "10.0.0.0/16"
   cidr_blocks = [for cidr_block in cidrsubnets(local.cidr_block, 4, 4, 4) : cidrsubnets(cidr_block, 4, 4, 4)]
+
+  prom_service_account_name = "amazon-managed-service-prometheus"
 }
 
 data "aws_caller_identity" "current" {}
@@ -90,7 +106,6 @@ resource "aws_security_group" "additional" {
   tags = local.tags
 }
 
-
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 3.0"
@@ -99,9 +114,9 @@ module "vpc" {
   cidr = local.cidr_block
 
   azs             = ["${var.region}a", "${var.region}b", "${var.region}c"]
-  private_subnets = local.cidr_blocks[0]
-  public_subnets  = local.cidr_blocks[1]
-  intra_subnets   = local.cidr_blocks[2]
+  private_subnets = local.cidr_blocks.0
+  public_subnets  = local.cidr_blocks.1
+  intra_subnets   = local.cidr_blocks.2
 
   enable_nat_gateway   = true
   single_nat_gateway   = true
@@ -268,7 +283,7 @@ resource "kubernetes_deployment" "load" {
 
       spec {
         container {
-          image             = "ghcr.io/nobl9/build_on_aws_demo_load:steps-one"
+          image             = "ghcr.io/nobl9/build_on_aws_demo_load:steps-three"
           name              = "load"
           image_pull_policy = "Always"
 
@@ -305,10 +320,7 @@ resource "kubernetes_deployment" "server" {
     name      = "${local.name}-server"
     namespace = "${var.k8s_namespace}-server"
     labels = {
-      app                          = "Server"
-      "tags.datadoghq.com/env"     = "dev"
-      "tags.datadoghq.com/service" = "build-on-aws-demo-server"
-      "tags.datadoghq.com/version" = "1.0"
+      app = "Server"
     }
   }
 
@@ -324,10 +336,7 @@ resource "kubernetes_deployment" "server" {
     template {
       metadata {
         labels = {
-          app                          = "Server"
-          "tags.datadoghq.com/env"     = "dev"
-          "tags.datadoghq.com/service" = "build-on-aws-demo-server"
-          "tags.datadoghq.com/version" = "1.0"
+          app = "Server"
         }
         annotations = {
           "prometheus.io/scrape" = "true"
@@ -336,52 +345,10 @@ resource "kubernetes_deployment" "server" {
       }
 
       spec {
-        volume {
-          host_path {
-            path = "/var/run/datadog/"
-          }
-          name = "apmsocketpath"
-        }
-
         container {
-          image             = "ghcr.io/nobl9/build_on_aws_demo_server:steps-one"
+          image             = "ghcr.io/nobl9/build_on_aws_demo_server:steps-three"
           name              = "server"
           image_pull_policy = "Always"
-
-          volume_mount {
-            name       = "apmsocketpath"
-            mount_path = "/var/run/datadog"
-          }
-
-          env {
-            name  = "DD_AGENT_HOST"
-            value = "datadog-build-on-aws-demo.datadog.svc.cluster.local"
-          }
-          env {
-            name = "DD_ENV"
-            value_from {
-              field_ref {
-                field_path = "metadata.labels['tags.datadoghq.com/env']"
-              }
-            }
-          }
-
-          env {
-            name = "DD_SERVICE"
-            value_from {
-              field_ref {
-                field_path = "metadata.labels['tags.datadoghq.com/service']"
-              }
-            }
-          }
-          env {
-            name = "DD_VERSION"
-            value_from {
-              field_ref {
-                field_path = "metadata.labels['tags.datadoghq.com/version']"
-              }
-            }
-          }
 
           resources {
             limits = {
@@ -426,3 +393,160 @@ resource "kubernetes_service" "server" {
   }
   depends_on = [kubernetes_namespace.server]
 }
+
+resource "random_pet" "irsa_role" {}
+
+module "amazon_managed_service_prometheus_irsa_role" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "5.2.0"
+
+  role_name                                       = "${local.prom_service_account_name}-${random_pet.irsa_role.id}"
+  attach_amazon_managed_service_prometheus_policy = true
+
+  oidc_providers = {
+    ex = {
+      provider_arn = module.eks.oidc_provider_arn
+      namespace_service_accounts = [
+        "${var.k8s_namespace}-prometheus:${local.prom_service_account_name}-${random_pet.irsa_role.id}",
+        "${var.k8s_namespace}-grafana:${local.prom_service_account_name}-${random_pet.irsa_role.id}"
+      ]
+    }
+  }
+
+  tags = local.tags
+}
+
+/*===========================================
+ *
+ * O11Y
+ *
+ */
+resource "aws_prometheus_workspace" "demo" {
+  alias = "${local.name}-prometheus"
+}
+
+resource "helm_release" "metrics_server" {
+  name             = "${local.name}-metrics"
+  repository       = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart            = "metrics-server"
+  namespace        = "${var.k8s_namespace}-metrics-server"
+  create_namespace = true
+  version          = "3.8.2"
+}
+
+resource "helm_release" "prometheus" {
+  name             = "${local.name}-prometheus"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "prometheus"
+  namespace        = "${var.k8s_namespace}-prometheus"
+  create_namespace = true
+  version          = "15.9.0"
+
+  lint = true
+
+  values = [
+    <<-EOT
+serviceAccounts:
+  server:
+    name: ${module.amazon_managed_service_prometheus_irsa_role.iam_role_name}
+    annotations:
+      eks.amazonaws.com/role-arn: ${module.amazon_managed_service_prometheus_irsa_role.iam_role_arn}
+  alertmanager:
+    create: false
+  pushgateway:
+    create: false
+server:
+  statefulSet:
+    enabled: true
+    persistentVolume:
+      enabled: true
+  remoteWrite:
+    - url: "${aws_prometheus_workspace.demo.prometheus_endpoint}api/v1/remote_write"
+      sigv4:
+        region: ${var.region}
+      queue_config:
+        max_samples_per_send: 1000
+        max_shards: 200
+        capacity: 2500
+prometheusSpec:
+  resources:
+    limits:
+      cpu: 250m
+      memory: 2000Mi
+    requests:
+      cpu: 50m
+      memory: 1300Mi
+  storageSpec:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+nodeExporter:
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9100"
+alertmanager:
+  enabled: false
+pushgateway:
+  enabled: false
+extraScrapeConfigs: |
+  - job_name: prometheus-amp
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scheme: http
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+          - ${var.k8s_namespace}-server
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+      regex: "true"
+      replacement: $1
+      action: keep
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __address__
+EOT
+  ]
+}
+
+resource "helm_release" "grafana" {
+  name             = "${local.name}-grafana"
+  repository       = "https://grafana.github.io/helm-charts"
+  chart            = "grafana"
+  namespace        = "${var.k8s_namespace}-grafana"
+  create_namespace = true
+  version          = "6.32.2"
+
+  values = [
+    <<-EOT
+serviceAccount:
+    name: ${module.amazon_managed_service_prometheus_irsa_role.iam_role_name}
+    annotations:
+      eks.amazonaws.com/role-arn: ${module.amazon_managed_service_prometheus_irsa_role.iam_role_arn}
+grafana.ini:
+  auth:
+    sigv4_auth_enabled: true
+persistence:
+  enabled: true
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: ${aws_prometheus_workspace.demo.prometheus_endpoint}
+      jsonData:
+        sigV4Auth: true
+        sigV4AuthType: default
+        sigV4Region: ${var.region}
+      isDefault: true
+EOT
+  ]
+}
+
